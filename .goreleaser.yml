@@ -1,0 +1,97 @@
+version: 2
+
+project_name: gowatchrun
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: gowatchrun
+    main: .
+    binary: gowatchrun
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w # Strip debug information and symbols
+
+archives:
+  - id: gowatchrun-archive
+    ids:
+      - gowatchrun
+    formats: [ tar.gz ]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+    wrap_in_directory: true
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - 'Merge pull request'
+      - 'Merge branch'
+
+release:
+  # github:
+  #   owner: your-github-username
+  #   name: gowatchrun
+
+  # Draft release allows review before publishing
+  draft: false
+  # Prerelease marks the release as such on GitHub
+  prerelease: auto # Mark as prerelease if version contains hyphen (e.g., v1.0.0-beta)
+
+  # Optional: Add extra files to the release outside the archives
+  # extra_files:
+  #   - glob: ./path/to/some/file.txt
+
+# Optional: Add signing configuration if needed
+# signs:
+#   - artifacts: checksum
+#     args: ["--batch", "--local-user", "{{ .Env.GPG_FINGERPRINT }}", "--output", "${signature}", "--detach-sign", "${artifact}"]
+
+# Optional: Docker image configuration
+# https://goreleaser.com/customization/docker/
+# dockers:
+#   - image_templates:
+#       - "your-dockerhub-user/gowatchrun:{{ .Version }}"
+#       - "your-dockerhub-user/gowatchrun:latest"
+#     dockerfile: Dockerfile
+#     build_flag_templates:
+#       - "--label=org.opencontainers.image.created={{.Date}}"
+#       - "--label=org.opencontainers.image.title={{.ProjectName}}"
+#       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+#       - "--label=org.opencontainers.image.version={{.Version}}"
+
+# Optional: Homebrew Tap configuration
+# https://goreleaser.com/customization/homebrew/
+# brews:
+#   - name: gowatchrun
+#     tap:
+#       owner: your-github-username
+#       name: homebrew-tap
+#     commit_author:
+#       name: goreleaserbot
+#       email: bot@goreleaser.com
+#     homepage: "https://github.com/your-github-username/gowatchrun"
+#     description: "File watcher and command runner"
+#     license: "MIT" # Match your project license
+#     # Optional: Add dependencies, test block, etc.
