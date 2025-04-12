@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,15 +10,19 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
 
 var (
 	watchDirs   []string
+	excludeDirs []string
 	patterns    []string
 	eventTypes  []string
 	commandTmpl string
 	recursive   bool
+	logLevel    string
 )
 
 type EventData struct {
@@ -37,6 +40,16 @@ var rootCmd = &cobra.Command{
 	Long: `gowatchrun monitors specified directories for file changes
 matching given patterns and executes a command template,
 substituting placeholders with event details.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		level, err := zerolog.ParseLevel(logLevel)
+		if err != nil {
+			log.Warn().Msgf("Invalid log level '%s', defaulting to 'info'. Error: %v", logLevel, err)
+			level = zerolog.InfoLevel
+		}
+		zerolog.SetGlobalLevel(level)
+		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
+		log.Debug().Msgf("Log level set to: %s", level.String())
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		runWatcher()
 	},
@@ -52,16 +65,20 @@ func init() {
 	rootCmd.Flags().StringSliceVarP(&eventTypes, "event", "e", []string{"all"}, "Event type(s) to trigger on (write, create, remove, rename, chmod, all - can be specified multiple times)")
 	rootCmd.Flags().StringVarP(&commandTmpl, "command", "c", "", "Command template to execute (required)")
 	rootCmd.Flags().BoolVarP(&recursive, "recursive", "r", false, "Watch directories recursively")
+	rootCmd.Flags().StringSliceVarP(&excludeDirs, "exclude", "x", []string{}, "Directory path(s) to exclude (can be specified multiple times)")
+	rootCmd.Flags().StringVar(&logLevel, "log-level", "info", "Set the logging level (e.g., debug, info, warn, error, fatal, panic)")
 
 	if err := rootCmd.MarkFlagRequired("command"); err != nil {
-		log.Fatalf("Failed to mark 'command' flag as required: %v", err)
+		log.Fatal().Msgf("Failed to mark 'command' flag as required: %v", err)
 	}
+
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
 }
 
 func runWatcher() {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		log.Fatalf("Failed to create watcher: %v", err)
+		log.Fatal().Msgf("Failed to create watcher: %v", err)
 	}
 	defer watcher.Close()
 
@@ -81,47 +98,76 @@ func runWatcher() {
 				if !ok {
 					return
 				}
-				log.Printf("Watcher error: %v", err)
+				log.Error().Msgf("Watcher error: %v", err)
 			}
 		}
 	}()
 
-	log.Printf("Starting watcher for directories: %v", watchDirs)
+	log.Info().Msgf("Starting watcher for directories: %v", watchDirs)
 	if recursive {
-		log.Println("Recursive mode enabled.")
+		log.Info().Msg("Recursive mode enabled.")
 	}
-	log.Printf("Watching for patterns: %v", patterns)
-	log.Printf("Triggering on events: %v", eventTypes)
-	log.Printf("Executing command template: %s", commandTmpl)
+	log.Info().Msgf("Watching for patterns: %v", patterns)
+	log.Info().Msgf("Triggering on events: %v", eventTypes)
+	log.Info().Msgf("Executing command template: %s", commandTmpl)
+
+	absExcludedDirs := make(map[string]bool)
+	if len(excludeDirs) > 0 {
+		log.Info().Msgf("Excluding directories: %v", excludeDirs)
+		for _, exDir := range excludeDirs {
+			absExDir, err := filepath.Abs(exDir)
+			if err != nil {
+				log.Warn().Msgf("Could not get absolute path for excluded directory %s: %v", exDir, err)
+				continue
+			}
+			absExcludedDirs[absExDir] = true
+			//log.Debug().Msgf("Absolute excluded path added: %s", absExDir)
+		}
+	}
 
 	for _, dir := range watchDirs {
 		if recursive {
 			err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 				if err != nil {
-					log.Printf("Error accessing path %q: %v", path, err)
-					return err
+					log.Warn().Msgf("Error accessing path %q: %v", path, err)
+					return err // Propagate error to stop Walk if needed
 				}
+
 				if info.IsDir() {
-					log.Printf("Adding recursive watch for: %s", path)
+					absPath, pathErr := filepath.Abs(path)
+					if pathErr != nil {
+						log.Warn().Msgf("Could not get absolute path for %s: %v", path, pathErr)
+						return nil
+					}
+
+					for exPath := range absExcludedDirs {
+						if strings.HasPrefix(absPath+string(filepath.Separator), exPath+string(filepath.Separator)) {
+							log.Debug().Msgf("Skipping excluded directory: %s", path)
+							return filepath.SkipDir
+						}
+					}
+
+					log.Debug().Msgf("Adding recursive watch for: %s", path)
 					if watchErr := watcher.Add(path); watchErr != nil {
-						log.Printf("Failed to add recursive watch for %s: %v", path, watchErr)
+						log.Warn().Msgf("Failed to add recursive watch for %s: %v", path, watchErr)
 					}
 				}
 				return nil
 			})
 			if err != nil {
-				log.Printf("Error walking the path %q: %v", dir, err)
+				log.Error().Msgf("Error walking the path %q: %v", dir, err)
 			}
 		} else {
-			log.Printf("Adding watch for: %s", dir)
+
+			log.Info().Msgf("Adding watch for: %s", dir)
 			if err = watcher.Add(dir); err != nil {
-				log.Printf("Failed to add watch for %s: %v", dir, err)
+				log.Warn().Msgf("Failed to add watch for %s: %v", dir, err)
 			}
 		}
 	}
 
 	<-done
-	log.Println("Watcher stopped.")
+	log.Info().Msg("Watcher stopped.")
 }
 
 func processEventTypes(types []string) map[fsnotify.Op]bool {
@@ -157,7 +203,7 @@ func processEventTypes(types []string) map[fsnotify.Op]bool {
 		case "chmod":
 			lookup[fsnotify.Chmod] = true
 		default:
-			log.Printf("Warning: Unknown event type '%s' ignored.", t)
+			log.Warn().Msgf("Warning: Unknown event type '%s' ignored.", t)
 		}
 	}
 	return lookup
@@ -183,7 +229,7 @@ func handleEvent(event fsnotify.Event, allowedEvents map[fsnotify.Op]bool, patte
 	for _, pattern := range patterns {
 		match, err := filepath.Match(pattern, fileName)
 		if err != nil {
-			log.Printf("Error matching pattern '%s' with file '%s': %v", pattern, fileName, err)
+			log.Error().Msgf("Error matching pattern '%s' with file '%s': %v", pattern, fileName, err)
 			continue
 		}
 		if match {
@@ -199,12 +245,12 @@ func handleEvent(event fsnotify.Event, allowedEvents map[fsnotify.Op]bool, patte
 	if recursive && event.Has(fsnotify.Create) {
 		info, err := os.Stat(event.Name)
 		if err == nil && info.IsDir() {
-			log.Printf("Adding recursive watch for newly created directory: %s", event.Name)
+			log.Debug().Msgf("Adding recursive watch for newly created directory: %s", event.Name)
 			// TODO: Implement dynamic addition of created directories in recursive mode.
 		}
 	}
 
-	log.Printf("Detected %s event for: %s", eventStr, event.Name)
+	log.Info().Msgf("Detected %s event for: %s", eventStr, event.Name)
 
 	ext := filepath.Ext(fileName)
 	data := EventData{
@@ -218,18 +264,18 @@ func handleEvent(event fsnotify.Event, allowedEvents map[fsnotify.Op]bool, patte
 
 	tmpl, err := template.New("command").Parse(commandTmpl)
 	if err != nil {
-		log.Printf("Error parsing command template: %v", err)
+		log.Error().Msgf("Error parsing command template: %v", err)
 		return
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		log.Printf("Error executing command template: %v", err)
+		log.Error().Msgf("Error executing command template: %v", err)
 		return
 	}
 
 	cmdString := buf.String()
-	log.Printf("Executing: %s", cmdString)
+	log.Info().Msgf("Executing: %s", cmdString)
 
 	cmdExec := exec.Command("sh", "-c", cmdString)
 	cmdExec.Stdout = os.Stdout
@@ -241,8 +287,8 @@ func handleEvent(event fsnotify.Event, allowedEvents map[fsnotify.Op]bool, patte
 	duration := time.Since(startTime)
 
 	if err != nil {
-		log.Printf("Command execution failed (duration: %s): %v", duration.Round(time.Millisecond), err)
+		log.Error().Msgf("Command execution failed (duration: %s): %v", duration.Round(time.Millisecond), err)
 	} else {
-		log.Printf("Command executed successfully (duration: %s)", duration.Round(time.Millisecond))
+		log.Info().Msgf("Command executed successfully (duration: %s)", duration.Round(time.Millisecond))
 	}
 }

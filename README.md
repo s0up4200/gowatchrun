@@ -13,7 +13,7 @@ A simple Go command-line tool to watch specified directories for file changes (c
 
 ## Installation
 
-Ensure you have Go installed (version 1.18 or later recommended). You can install `gowatchrun` using:
+Ensure you have Go installed. You can install `gowatchrun` using:
 
 ```bash
 go install github.com/s0up4200/gowatchrun@latest 
@@ -34,6 +34,7 @@ gowatchrun [flags]
 *   `-e, --event <type>`: Event type(s) to trigger on. Valid types: `write`, `create`, `remove`, `rename`, `chmod`, `all`. Can be specified multiple times. (Default: `all`)
 *   `-c, --command <template>`: Command template to execute. This flag is **required**.
 *   `-r, --recursive`: Watch directories recursively. (Default: `false`)
+*   `-x, --exclude <dir>`: Directory path(s) to exclude when watching recursively. Can be specified multiple times. (Default: none)
 *   `-h, --help`: Display help information.
 
 ### Command Template Placeholders
@@ -54,6 +55,11 @@ The `--command` flag accepts a Go template string where the following placeholde
 1.  **Run Go Tests on Change:** Watch for changes in `.go` files and run tests.
     ```bash
     gowatchrun -w . -r -p "*.go" -e write -c "go test ./..."
+    ```
+
+2.  **Run Go Tests, Excluding Vendor Directory:** Watch for changes in `.go` files recursively, but ignore the `vendor/` directory.
+    ```bash
+    gowatchrun -w . -r -p "*.go" -e write -x vendor -c "go test ./..."
     ```
 
 ### Seedbox & media automation examples
