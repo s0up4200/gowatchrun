@@ -118,8 +118,6 @@ These examples demonstrate common automation tasks in a seedbox or media server 
           curl -X POST 'http://YOUR_JELLYFIN_URL:8096/Library/Refresh' \
           -H 'Authorization: MediaBrowser Token=\"YOUR_API_KEY\"' \
           -H 'Content-Length: 0'"
-    # --- Emby Example (similar structure, check Emby API docs for exact endpoint) ---
-    # gowatchrun ... -c "echo 'New media {{.Name}} detected, triggering Emby scan...' && curl -X POST 'http://YOUR_EMBY_URL:8096/Library/Refresh?api_key=YOUR_API_KEY'"
     ```
 
 4.  **Move Completed Media & Associated Files:** Move video files *and* their corresponding subtitle files (`.srt`) from a completed download directory to a media library.
