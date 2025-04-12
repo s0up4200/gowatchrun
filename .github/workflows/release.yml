@@ -45,7 +45,7 @@ jobs:
         uses: goreleaser/goreleaser-action@v6 # Use v6+ for distribution input
         with:
           distribution: goreleaser-pro # Specify Pro distribution
-          version: latest
+          version: ~> v2
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
