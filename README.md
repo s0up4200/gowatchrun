@@ -35,6 +35,8 @@ gowatchrun [flags]
 *   `-c, --command <template>`: Command template to execute. This flag is **required**.
 *   `-r, --recursive`: Watch directories recursively. (Default: `false`)
 *   `-x, --exclude <dir>`: Directory path(s) to exclude when watching recursively. Can be specified multiple times. (Default: none)
+*   `--delay <duration>`: Debounce delay before executing the command after a change (e.g., `300ms`, `1s`). Waits for a period of inactivity. (Default: `0s`)
+*   `--log-level <level>`: Set the logging level (e.g., `debug`, `info`, `warn`, `error`). (Default: `info`)
 *   `-h, --help`: Display help information.
 
 ### Command Template Placeholders
@@ -60,6 +62,11 @@ The `--command` flag accepts a Go template string where the following placeholde
 2.  **Run Go Tests, Excluding Vendor Directory:** Watch for changes in `.go` files recursively, but ignore the `vendor/` directory.
     ```bash
     gowatchrun -w . -r -p "*.go" -e write -x vendor -c "go test ./..."
+    ```
+
+3.  **Build Project with Debounce:** Watch `.go` files and build the project, but wait for 500ms of inactivity before building to avoid rapid rebuilds during saves.
+    ```bash
+    gowatchrun -w . -r -p "*.go" -e write --delay 500ms -c "go build -v ."
     ```
 
 ### Seedbox & media automation examples
