@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"text/template"
 	"time"
@@ -65,7 +66,7 @@ func Execute() error {
 func init() {
 	rootCmd.Flags().StringSliceVarP(&watchDirs, "watch", "w", []string{"."}, "Directory(ies) to watch (can be specified multiple times)")
 	rootCmd.Flags().StringSliceVarP(&patterns, "pattern", "p", []string{"*.*"}, "Glob pattern(s) for files to watch (can be specified multiple times)")
-	rootCmd.Flags().StringSliceVarP(&eventTypes, "event", "e", []string{"all"}, "Event type(s) to trigger on (write, create, remove, rename, chmod, all - can be specified multiple times)")
+	rootCmd.Flags().StringSliceVarP(&eventTypes, "event", "e", []string{"all"}, "Event type(s) to trigger on (write, create, remove, rename, chmod, open, read, closewrite, closeread, all - can be specified multiple times). 'open', 'read', 'closewrite', 'closeread' are only supported on Linux and FreeBSD.")
 	rootCmd.Flags().StringVarP(&commandTmpl, "command", "c", "", "Command template to execute (required)")
 	rootCmd.Flags().BoolVarP(&recursive, "recursive", "r", false, "Watch directories recursively")
 	rootCmd.Flags().StringSliceVarP(&excludeDirs, "exclude", "x", []string{}, "Directory path(s) to exclude (can be specified multiple times)")
@@ -243,14 +244,23 @@ func processEventTypes(types []string) map[fsnotify.Op]bool {
 		}
 	}
 
+	isUnportableSupported := func() bool {
+		return runtime.GOOS == "linux" || runtime.GOOS == "freebsd"
+	}
+
 	if hasAll {
-		return map[fsnotify.Op]bool{
-			fsnotify.Create: true,
-			fsnotify.Write:  true,
-			fsnotify.Remove: true,
-			fsnotify.Rename: true,
-			fsnotify.Chmod:  true,
+		lookup[fsnotify.Create] = true
+		lookup[fsnotify.Write] = true
+		lookup[fsnotify.Remove] = true
+		lookup[fsnotify.Rename] = true
+		lookup[fsnotify.Chmod] = true
+		if isUnportableSupported() {
+			lookup[fsnotify.Op(1<<5)] = true // xUnportableOpen
+			lookup[fsnotify.Op(1<<6)] = true // xUnportableRead
+			lookup[fsnotify.Op(1<<7)] = true // xUnportableCloseWrite
+			lookup[fsnotify.Op(1<<8)] = true // xUnportableCloseRead
 		}
+		return lookup
 	}
 
 	for _, t := range types {
@@ -265,6 +275,34 @@ func processEventTypes(types []string) map[fsnotify.Op]bool {
 			lookup[fsnotify.Rename] = true
 		case "chmod":
 			lookup[fsnotify.Chmod] = true
+		case "open":
+			if isUnportableSupported() {
+				lookup[fsnotify.Op(1<<5)] = true // xUnportableOpen
+			} else {
+				log.Error().Msg("'open' event is only supported on Linux and FreeBSD; exiting.")
+				os.Exit(1)
+			}
+		case "read":
+			if isUnportableSupported() {
+				lookup[fsnotify.Op(1<<6)] = true // xUnportableRead
+			} else {
+				log.Error().Msg("'read' event is only supported on Linux and FreeBSD; exiting.")
+				os.Exit(1)
+			}
+		case "closewrite":
+			if isUnportableSupported() {
+				lookup[fsnotify.Op(1<<7)] = true // xUnportableCloseWrite
+			} else {
+				log.Error().Msg("'closewrite' event is only supported on Linux and FreeBSD; exiting.")
+				os.Exit(1)
+			}
+		case "closeread":
+			if isUnportableSupported() {
+				lookup[fsnotify.Op(1<<8)] = true // xUnportableCloseRead
+			} else {
+				log.Error().Msg("'closeread' event is only supported on Linux and FreeBSD; exiting.")
+				os.Exit(1)
+			}
 		default:
 			log.Warn().Msgf("Warning: Unknown event type '%s' ignored.", t)
 		}

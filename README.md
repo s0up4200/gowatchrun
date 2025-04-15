@@ -31,7 +31,7 @@ gowatchrun [flags]
 
 *   `-w, --watch <dir>`: Directory(ies) to watch. Can be specified multiple times. (Default: `.`)
 *   `-p, --pattern <glob>`: Glob pattern(s) for files to watch. Can be specified multiple times. (Default: `*.*`)
-*   `-e, --event <type>`: Event type(s) to trigger on. Valid types: `write`, `create`, `remove`, `rename`, `chmod`, `all`. Can be specified multiple times. (Default: `all`)
+*   `-e, --event <type>`: Event type(s) to trigger on. Valid types: `write`, `create`, `remove`, `rename`, `chmod`, `open`, `read`, `closewrite`, `closeread`, `all`. Can be specified multiple times. (Default: `all`)
 *   `-c, --command <template>`: Command template to execute. This flag is **required**.
 *   `-r, --recursive`: Watch directories recursively. (Default: `false`)
 *   `-x, --exclude <dir>`: Directory path(s) to exclude when watching recursively. Can be specified multiple times. (Default: none)
@@ -46,9 +46,27 @@ The `--command` flag accepts a Go template string where the following placeholde
 *   `{{.Path}}`: The full path to the file that triggered the event (e.g., `/home/user/project/src/main.go`).
 *   `{{.Name}}`: The base name of the file (e.g., `main.go`).
 *   `{{.Event}}`: The type of event detected as a string (e.g., `WRITE`, `CREATE`, `REMOVE`). Note: `fsnotify` might report multiple ops sometimes (e.g., `WRITE|CHMOD`); the first matched allowed event is used here.
+    *   On Linux and FreeBSD, you may also see: `OPEN`, `READ`, `CLOSE_WRITE`, `CLOSE_READ` if you use the corresponding event types.
 *   `{{.Ext}}`: The file extension, including the dot (e.g., `.go`).
 *   `{{.Dir}}`: The directory containing the file (e.g., `/home/user/project/src`).
 *   `{{.BaseName}}`: The base name of the file without the extension (e.g., `main`).
+
+## Platform-specific Event Types
+
+On Linux and FreeBSD, you can use additional event types for more precise file monitoring:
+
+- `open`: File descriptor was opened.
+- `read`: File was read from.
+- `closewrite`: File opened for writing was closed (very useful for detecting when a file is done being written/copied).
+- `closeread`: File opened for reading was closed.
+
+These are not available on macOS or Windows. If you specify them on unsupported platforms, the program will simply exit with an error.
+
+### Example: Only trigger after a file is fully written (Linux/BSD only)
+
+```bash
+gowatchrun -w . -r -p "*.mkv" -e closewrite -c "echo 'Video {{.Name}} finished writing!'"
+```
 
 ## Examples
 
