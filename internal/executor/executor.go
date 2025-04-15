@@ -14,9 +14,11 @@ import (
 )
 
 func Execute(cfg watcher.Config, data *watcher.EventData) {
-	if data == nil {
-		log.Warn().Msg("Attempted to execute command with nil event data.")
-		return
+	var templateData interface{}
+	if data != nil {
+		templateData = data
+	} else {
+		templateData = struct{}{}
 	}
 
 	if cfg.ClearTerminal {
@@ -33,7 +35,11 @@ func Execute(cfg watcher.Config, data *watcher.EventData) {
 		}
 	}
 
-	log.Debug().Msgf("Executing command for event: %s on %s", data.Event, data.Path)
+	if data != nil {
+		log.Debug().Msgf("Executing command for event: %s on %s", data.Event, data.Path)
+	} else {
+		log.Debug().Msg("Executing command for initial run (--run-on-start)")
+	}
 
 	tmpl, err := template.New("command").Parse(cfg.CommandTmpl)
 	if err != nil {
@@ -42,8 +48,8 @@ func Execute(cfg watcher.Config, data *watcher.EventData) {
 	}
 
 	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		log.Error().Msgf("Error executing command template with data %+v: %v", data, err)
+	if err := tmpl.Execute(&buf, templateData); err != nil {
+		log.Error().Msgf("Error executing command template with data %+v: %v", templateData, err)
 		return
 	}
 
@@ -61,17 +67,21 @@ func Execute(cfg watcher.Config, data *watcher.EventData) {
 	duration := time.Since(startTime)
 
 	if err != nil {
-		log.Error().
+		logEntry := log.Error().
 			Str("command", cmdString).
-			Str("event_path", data.Path).
-			Str("event_type", data.Event).
 			Dur("duration", duration.Round(time.Millisecond)).
-			Err(err).
-			Msg("Command execution failed")
+			Err(err)
+		if data != nil {
+			logEntry = logEntry.Str("event_path", data.Path).Str("event_type", data.Event)
+		}
+		logEntry.Msg("Command execution failed")
 	} else {
-		log.Trace().
+		logEntry := log.Trace().
 			Str("command", cmdString).
-			Dur("duration", duration.Round(time.Millisecond)).
-			Msg("Command executed successfully")
+			Dur("duration", duration.Round(time.Millisecond))
+		if data != nil {
+			logEntry = logEntry.Str("event_path", data.Path).Str("event_type", data.Event)
+		}
+		logEntry.Msg("Command executed successfully")
 	}
 }

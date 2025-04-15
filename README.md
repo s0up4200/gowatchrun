@@ -37,6 +37,7 @@ gowatchrun [flags]
 *   `-x, --exclude <dir>`: Directory path(s) to exclude when watching recursively. Can be specified multiple times. (Default: none)
 *   `--delay <duration>`: Debounce delay before executing the command after a change (e.g., `300ms`, `1s`). Waits for a period of inactivity. (Default: `0s`)
 *   `-C, --clear`: Clear the terminal screen before each command execution. (Default: `false`)
+*   `--run-on-start`: Execute the command once immediately on startup, before watching for changes. (Default: `false`)
 *   `--log-level <level>`: Set the logging level (e.g., `debug`, `info`, `warn`, `error`). (Default: `info`)
 *   `-h, --help`: Display help information.
 

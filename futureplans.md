@@ -13,7 +13,7 @@ Based on research into similar tools (like `mitranim/gow`) and common watcher fu
     *   Benefit: Prevents rapid-fire command executions caused by editors saving multiple times or build processes generating intermediate files quickly.
     *   Example: `gowatchrun --delay 300ms -c "echo {{.Path}} changed"`
 
-3.  **Initial Run (`--run-on-start`)**
+3.  **[DONE] Initial Run (`--run-on-start`)**
     *   Add a flag to execute the command template once immediately when `gowatchrun` starts, before any file changes are detected.
     *   Benefit: Useful for initial setup, running tests on startup, or ensuring the command works correctly from the beginning.
     *   Example: `gowatchrun --run-on-start -c "go build ."`

@@ -22,6 +22,7 @@ var (
 	logLevel      string
 	delayStr      string
 	clearTerminal bool
+	runOnStart    bool
 )
 
 var rootCmd = &cobra.Command{
@@ -61,7 +62,14 @@ substituting placeholders with event details.`,
 			ClearTerminal: clearTerminal,
 		}
 
-		log.Info().Msg("Starting gowatchrun...")
+		if runOnStart {
+			log.Info().Msg("Executing command on start due to --run-on-start flag...")
+			// execute with nil EventData as there's no file event
+			executor.Execute(config, nil)
+			log.Info().Msg("Initial command execution finished.")
+		}
+
+		log.Info().Msg("Starting file watcher...")
 		err := watcher.Run(config, executor.Execute)
 		if err != nil {
 			log.Error().Err(err).Msg("Watcher exited with error")
@@ -85,6 +93,7 @@ func init() {
 	rootCmd.Flags().StringVar(&logLevel, "log-level", "info", "Set the logging level (e.g., debug, info, warn, error).")
 	rootCmd.Flags().StringVar(&delayStr, "delay", "0s", "Debounce delay before executing the command after a change (e.g., 300ms, 1s). Waits for a period of inactivity.")
 	rootCmd.Flags().BoolVarP(&clearTerminal, "clear", "C", false, "Clear terminal before executing command.")
+	rootCmd.Flags().BoolVar(&runOnStart, "run-on-start", false, "Execute the command once immediately on startup.")
 
 	if err := rootCmd.MarkFlagRequired("command"); err != nil {
 		log.Fatal().Err(err).Msg("Failed to mark 'command' flag as required")
