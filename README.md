@@ -36,6 +36,7 @@ gowatchrun [flags]
 *   `-r, --recursive`: Watch directories recursively. (Default: `false`)
 *   `-x, --exclude <dir>`: Directory path(s) to exclude when watching recursively. Can be specified multiple times. (Default: none)
 *   `--delay <duration>`: Debounce delay before executing the command after a change (e.g., `300ms`, `1s`). Waits for a period of inactivity. (Default: `0s`)
+*   `-C, --clear`: Clear the terminal screen before each command execution. (Default: `false`)
 *   `--log-level <level>`: Set the logging level (e.g., `debug`, `info`, `warn`, `error`). (Default: `info`)
 *   `-h, --help`: Display help information.
 
@@ -85,6 +86,11 @@ gowatchrun -w . -r -p "*.mkv" -e closewrite -c "echo 'Video {{.Name}} finished w
 3.  **Build Project with Debounce:** Watch `.go` files and build the project, but wait for 500ms of inactivity before building to avoid rapid rebuilds during saves.
     ```bash
     gowatchrun -w . -r -p "*.go" -e write --delay 500ms -c "go build -v ."
+    ```
+
+4.  **Run Tests with Clean Output:** Clear the terminal before each test run for better readability.
+    ```bash
+    gowatchrun -w . -r -p "*.go" -e write -C -c "go test ./..."
     ```
 
 ### Seedbox & media automation examples

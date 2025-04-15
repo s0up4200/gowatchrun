@@ -13,14 +13,15 @@ import (
 )
 
 var (
-	watchDirs   []string
-	excludeDirs []string
-	patterns    []string
-	eventTypes  []string
-	commandTmpl string
-	recursive   bool
-	logLevel    string
-	delayStr    string
+	watchDirs     []string
+	excludeDirs   []string
+	patterns      []string
+	eventTypes    []string
+	commandTmpl   string
+	recursive     bool
+	logLevel      string
+	delayStr      string
+	clearTerminal bool
 )
 
 var rootCmd = &cobra.Command{
@@ -57,6 +58,7 @@ substituting placeholders with event details.`,
 			CommandTmpl:   commandTmpl,
 			Recursive:     recursive,
 			DebounceDelay: debounceDelay,
+			ClearTerminal: clearTerminal,
 		}
 
 		log.Info().Msg("Starting gowatchrun...")
@@ -74,18 +76,17 @@ func Execute() error {
 }
 
 func init() {
-	rootCmd.Flags().StringSliceVarP(&watchDirs, "watch", "w", []string{"."}, "Directory(ies) to watch (can be specified multiple times)")
-	rootCmd.Flags().StringSliceVarP(&patterns, "pattern", "p", []string{"*.*"}, "Glob pattern(s) for files to watch (can be specified multiple times)")
-	rootCmd.Flags().StringSliceVarP(&eventTypes, "event", "e", []string{"all"}, "Event type(s) to trigger on (write, create, remove, rename, chmod, open, read, closewrite, closeread, all - can be specified multiple times). 'open', 'read', 'closewrite', 'closeread' are only supported on Linux and FreeBSD.")
-	rootCmd.Flags().StringVarP(&commandTmpl, "command", "c", "", "Command template to execute (required)")
-	rootCmd.Flags().BoolVarP(&recursive, "recursive", "r", false, "Watch directories recursively")
-	rootCmd.Flags().StringSliceVarP(&excludeDirs, "exclude", "x", []string{}, "Directory path(s) to exclude (can be specified multiple times)")
-	rootCmd.Flags().StringVar(&logLevel, "log-level", "info", "Set the logging level (e.g., debug, info, warn, error, fatal, panic)")
-	rootCmd.Flags().StringVar(&delayStr, "delay", "0s", "Debounce delay (e.g., 500ms, 1s, 2s)")
+	rootCmd.Flags().StringSliceVarP(&watchDirs, "watch", "w", []string{"."}, "Directory(ies) to watch. Can be specified multiple times.")
+	rootCmd.Flags().StringSliceVarP(&excludeDirs, "exclude", "x", []string{}, "Directory path(s) to exclude when watching recursively. Can be specified multiple times.")
+	rootCmd.Flags().StringSliceVarP(&patterns, "pattern", "p", []string{"*.*"}, "Glob pattern(s) for files to watch. Can be specified multiple times.")
+	rootCmd.Flags().StringSliceVarP(&eventTypes, "event", "e", []string{"all"}, "Event type(s) to trigger on. Valid types: write, create, remove, rename, chmod, open, read, closewrite, closeread, all. Can be specified multiple times.")
+	rootCmd.Flags().StringVarP(&commandTmpl, "command", "c", "", "Command template to execute. This flag is required.")
+	rootCmd.Flags().BoolVarP(&recursive, "recursive", "r", false, "Watch directories recursively.")
+	rootCmd.Flags().StringVar(&logLevel, "log-level", "info", "Set the logging level (e.g., debug, info, warn, error).")
+	rootCmd.Flags().StringVar(&delayStr, "delay", "0s", "Debounce delay before executing the command after a change (e.g., 300ms, 1s). Waits for a period of inactivity.")
+	rootCmd.Flags().BoolVarP(&clearTerminal, "clear", "C", false, "Clear terminal before executing command.")
 
 	if err := rootCmd.MarkFlagRequired("command"); err != nil {
-		log.Fatal().Msgf("Failed to mark 'command' flag as required: %v", err)
+		log.Fatal().Err(err).Msg("Failed to mark 'command' flag as required")
 	}
-
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"os/exec"
+	"runtime"
 	"text/template"
 	"time"
 
@@ -12,13 +13,29 @@ import (
 	"github.com/s0up4200/gowatchrun/internal/watcher"
 )
 
-func Execute(commandTmpl string, data *watcher.EventData) {
+func Execute(cfg watcher.Config, data *watcher.EventData) {
 	if data == nil {
 		log.Warn().Msg("Attempted to execute command with nil event data.")
 		return
 	}
 
-	tmpl, err := template.New("command").Parse(commandTmpl)
+	if cfg.ClearTerminal {
+		var clearCmd *exec.Cmd
+		if runtime.GOOS == "windows" {
+			clearCmd = exec.Command("cmd", "/c", "cls")
+		} else {
+			clearCmd = exec.Command("clear")
+		}
+		clearCmd.Stdout = os.Stdout
+		clearCmd.Stderr = os.Stderr
+		if err := clearCmd.Run(); err != nil {
+			log.Warn().Err(err).Msg("Failed to clear terminal")
+		}
+	}
+
+	log.Debug().Msgf("Executing command for event: %s on %s", data.Event, data.Path)
+
+	tmpl, err := template.New("command").Parse(cfg.CommandTmpl)
 	if err != nil {
 		log.Error().Msgf("Error parsing command template: %v", err)
 		return

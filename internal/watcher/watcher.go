@@ -20,7 +20,8 @@ type EventData struct {
 	BaseName string
 }
 
-type ExecutorFunc func(commandTmpl string, data *EventData)
+// ExecutorFunc defines the function signature for executing commands based on events and config.
+type ExecutorFunc func(cfg Config, data *EventData)
 
 type Config struct {
 	WatchDirs     []string
@@ -30,6 +31,7 @@ type Config struct {
 	CommandTmpl   string
 	Recursive     bool
 	DebounceDelay time.Duration
+	ClearTerminal bool // Add field for terminal clearing
 }
 
 func Run(cfg Config, execFunc ExecutorFunc) error {
@@ -86,13 +88,15 @@ func Run(cfg Config, execFunc ExecutorFunc) error {
 						debounceTimer.Reset(cfg.DebounceDelay)
 					}
 				} else {
-					execFunc(cfg.CommandTmpl, eventData)
+					// Pass the full config now
+					execFunc(cfg, eventData)
 				}
 
 			case <-timerChan:
 				log.Debug().Msg("Debounce timer fired.")
 				if lastEventData != nil {
-					execFunc(cfg.CommandTmpl, lastEventData)
+					// Pass the full config now
+					execFunc(cfg, lastEventData)
 					lastEventData = nil
 				}
 				debounceTimer = nil
