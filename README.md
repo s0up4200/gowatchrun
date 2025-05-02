@@ -4,19 +4,25 @@ A simple Go command-line tool to watch specified directories for file changes (c
 
 ## Features
 
-*   **Directory Watching:** Monitor one or more directories for file system events.
-*   **Recursive Watching:** Optionally monitor directories and their subdirectories recursively.
-*   **Pattern Matching:** Filter file events using glob patterns (e.g., `*.go`, `config/*.yaml`).
-*   **Event Filtering:** Configure which specific file system events trigger the command (e.g., `write`, `create`, `remove`, or `all`).
-*   **Command Templating:** Execute a user-provided command template using Go's `text/template` syntax.
-*   **Placeholder Substitution:** Inject event details into the command template.
+- **Directory Watching:** Monitor one or more directories for file system events.
+- **Recursive Watching:** Optionally monitor directories and their subdirectories recursively.
+- **Pattern Matching:** Filter file events using glob patterns (e.g., `*.go`, `config/*.yaml`).
+- **Event Filtering:** Configure which specific file system events trigger the command (e.g., `write`, `create`, `remove`, or `all`).
+- **Command Templating:** Execute a user-provided command template using Go's `text/template` syntax.
+- **Placeholder Substitution:** Inject event details into the command template.
 
 ## Installation
+
+### Pre-compiled binaries
+
+Grab the latest release from the [releases page](https://github.com/s0up4200/gowatchrun/releases).
+
+### Install from source
 
 Ensure you have Go installed. You can install `gowatchrun` using:
 
 ```bash
-go install github.com/s0up4200/gowatchrun@latest 
+go install github.com/s0up4200/gowatchrun@latest
 ```
 
 This will place the `gowatchrun` binary in your `$GOPATH/bin` or `$HOME/go/bin` directory (ensure this is in your system's PATH).
@@ -29,29 +35,29 @@ gowatchrun [flags]
 
 ### Flags
 
-*   `-w, --watch <dir>`: Directory(ies) to watch. Can be specified multiple times. (Default: `.`)
-*   `-p, --pattern <glob>`: Glob pattern(s) for files to watch. Can be specified multiple times. (Default: `*.*`)
-*   `-e, --event <type>`: Event type(s) to trigger on. Valid types: `write`, `create`, `remove`, `rename`, `chmod`, `open`, `read`, `closewrite`, `closeread`, `all`. Can be specified multiple times. (Default: `all`)
-*   `-c, --command <template>`: Command template to execute. This flag is **required**.
-*   `-r, --recursive`: Watch directories recursively. (Default: `false`)
-*   `-x, --exclude <dir>`: Directory path(s) to exclude when watching recursively. Can be specified multiple times. (Default: none)
-*   `--delay <duration>`: Debounce delay before executing the command after a change (e.g., `300ms`, `1s`). Waits for a period of inactivity. (Default: `0s`)
-*   `-C, --clear`: Clear the terminal screen before each command execution. (Default: `false`)
-*   `--run-on-start`: Execute the command once immediately on startup, before watching for changes. (Default: `false`)
-*   `--log-level <level>`: Set the logging level (e.g., `debug`, `info`, `warn`, `error`). (Default: `info`)
-*   `-h, --help`: Display help information.
+- `-w, --watch <dir>`: Directory(ies) to watch. Can be specified multiple times. (Default: `.`)
+- `-p, --pattern <glob>`: Glob pattern(s) for files to watch. Can be specified multiple times. (Default: `*.*`)
+- `-e, --event <type>`: Event type(s) to trigger on. Valid types: `write`, `create`, `remove`, `rename`, `chmod`, `open`, `read`, `closewrite`, `closeread`, `all`. Can be specified multiple times. (Default: `all`)
+- `-c, --command <template>`: Command template to execute. This flag is **required**.
+- `-r, --recursive`: Watch directories recursively. (Default: `false`)
+- `-x, --exclude <dir>`: Directory path(s) to exclude when watching recursively. Can be specified multiple times. (Default: none)
+- `--delay <duration>`: Debounce delay before executing the command after a change (e.g., `300ms`, `1s`). Waits for a period of inactivity. (Default: `0s`)
+- `-C, --clear`: Clear the terminal screen before each command execution. (Default: `false`)
+- `--run-on-start`: Execute the command once immediately on startup, before watching for changes. (Default: `false`)
+- `--log-level <level>`: Set the logging level (e.g., `debug`, `info`, `warn`, `error`). (Default: `info`)
+- `-h, --help`: Display help information.
 
 ### Command Template Placeholders
 
 The `--command` flag accepts a Go template string where the following placeholders can be used:
 
-*   `{{.Path}}`: The full path to the file that triggered the event (e.g., `/home/user/project/src/main.go`).
-*   `{{.Name}}`: The base name of the file (e.g., `main.go`).
-*   `{{.Event}}`: The type of event detected as a string (e.g., `WRITE`, `CREATE`, `REMOVE`). Note: `fsnotify` might report multiple ops sometimes (e.g., `WRITE|CHMOD`); the first matched allowed event is used here.
-    *   On Linux and FreeBSD, you may also see: `OPEN`, `READ`, `CLOSE_WRITE`, `CLOSE_READ` if you use the corresponding event types.
-*   `{{.Ext}}`: The file extension, including the dot (e.g., `.go`).
-*   `{{.Dir}}`: The directory containing the file (e.g., `/home/user/project/src`).
-*   `{{.BaseName}}`: The base name of the file without the extension (e.g., `main`).
+- `{{.Path}}`: The full path to the file that triggered the event (e.g., `/home/user/project/src/main.go`).
+- `{{.Name}}`: The base name of the file (e.g., `main.go`).
+- `{{.Event}}`: The type of event detected as a string (e.g., `WRITE`, `CREATE`, `REMOVE`). Note: `fsnotify` might report multiple ops sometimes (e.g., `WRITE|CHMOD`); the first matched allowed event is used here.
+  - On Linux and FreeBSD, you may also see: `OPEN`, `READ`, `CLOSE_WRITE`, `CLOSE_READ` if you use the corresponding event types.
+- `{{.Ext}}`: The file extension, including the dot (e.g., `.go`).
+- `{{.Dir}}`: The directory containing the file (e.g., `/home/user/project/src`).
+- `{{.BaseName}}`: The base name of the file without the extension (e.g., `main`).
 
 ## Platform-specific Event Types
 
@@ -75,16 +81,19 @@ gowatchrun -w . -r -p "*.mkv" -e closewrite -c "echo 'Video {{.Name}} finished w
 ### General file watching
 
 1.  **Run Go Tests on Change:** Watch for changes in `.go` files and run tests.
+
     ```bash
     gowatchrun -w . -r -p "*.go" -e write -c "go test ./..."
     ```
 
 2.  **Run Go Tests, Excluding Vendor Directory:** Watch for changes in `.go` files recursively, but ignore the `vendor/` directory.
+
     ```bash
     gowatchrun -w . -r -p "*.go" -e write -x vendor -c "go test ./..."
     ```
 
 3.  **Build Project with Debounce:** Watch `.go` files and build the project, but wait for 500ms of inactivity before building to avoid rapid rebuilds during saves.
+
     ```bash
     gowatchrun -w . -r -p "*.go" -e write --delay 500ms -c "go build -v ."
     ```
@@ -98,7 +107,20 @@ gowatchrun -w . -r -p "*.mkv" -e closewrite -c "echo 'Video {{.Name}} finished w
 
 These examples demonstrate common automation tasks in a seedbox or media server environment. Ensure `gowatchrun` runs with appropriate permissions for the commands being executed.
 
-1.  **Auto-unpack Archives:** Automatically unpack archives (`.zip`, `.rar`, `.7z`, etc.) when they appear in a completed downloads directory.
+1. **Create a torrent** with mkbrr when a new file appears in the watch directory.
+   ```bash
+   gowatchrun \
+     -w ~/Desktop/watch \
+     -e create \
+     -c "mkbrr create {{.Path}} --output ~/Desktop/{{.Name}} --workers 3 --quiet" \
+     --delay 5s
+   ```
+
+> [!NOTE]
+> You can use the `closewrite` event type (`-e closewrite`) to ensure the file is fully written before creating the torrent on linux/bsd systems. For other systems, you can use the `write` event type and add a delay with the `--delay` flag.
+
+2.  **Auto-unpack Archives:** Automatically unpack archives (`.zip`, `.rar`, `.7z`, etc.) when they appear in a completed downloads directory.
+
     ```bash
     # Watches for new archive files and attempts to unpack them.
     # Uses 'unar' if available (recommended), falling back to 'unzip' for .zip.
@@ -120,7 +142,8 @@ These examples demonstrate common automation tasks in a seedbox or media server 
           fi"
     ```
 
-2.  **Trigger Plex Library Scan:** Scan a specific Plex library section when a new media file appears.
+3.  **Trigger Plex Library Scan:** Scan a specific Plex library section when a new media file appears.
+
     ```bash
     # Watches for new video files in the final media directory.
     # Triggers a Plex library scan for a specific section ID (replace 'YOUR_SECTION_ID').
@@ -136,7 +159,8 @@ These examples demonstrate common automation tasks in a seedbox or media server 
           /usr/lib/plexmediaserver/Plex\ Media\ Scanner --scan --refresh --section YOUR_SECTION_ID"
     ```
 
-3.  **Trigger Jellyfin/Emby Library Scan (via API):** Scan all libraries when new media appears, using their respective APIs with `curl`.
+4.  **Trigger Jellyfin/Emby Library Scan (via API):** Scan all libraries when new media appears, using their respective APIs with `curl`.
+
     ```bash
     # Watches for new video files and triggers a Jellyfin/Emby library scan via API.
     # Replace 'YOUR_JELLYFIN_EMBY_URL' and 'YOUR_API_KEY'.
@@ -152,7 +176,8 @@ These examples demonstrate common automation tasks in a seedbox or media server 
           -H 'Content-Length: 0'"
     ```
 
-4.  **Move Completed Media & Associated Files:** Move video files *and* their corresponding subtitle files (`.srt`) from a completed download directory to a media library.
+5.  **Move Completed Media & Associated Files:** Move video files _and_ their corresponding subtitle files (`.srt`) from a completed download directory to a media library.
+
     ```bash
     # Watches for finished video files (.mkv, .mp4).
     # Moves the video AND any matching .srt file to the media library.
@@ -169,7 +194,8 @@ These examples demonstrate common automation tasks in a seedbox or media server 
           fi"
     ```
 
-5.  **Trigger rclone:** Automatically trigger an `rclone` sync when a new file appears in a specific directory (e.g., after processing).
+6.  **Trigger rclone:** Automatically trigger an `rclone` sync when a new file appears in a specific directory (e.g., after processing).
+
     ```bash
     # Watches for any new file in the staging directory and syncs that directory to a cloud remote.
     gowatchrun \
@@ -180,7 +206,8 @@ These examples demonstrate common automation tasks in a seedbox or media server 
           rclone copy --log-file=/var/log/rclone_sync.log {{.Dir}} myremote:backup/media/"
     ```
 
-6.  **Send Notification via ntfy.sh:** Send a push notification using ntfy.sh when a specific download completes.
+7.  **Send Notification via ntfy.sh:** Send a push notification using ntfy.sh when a specific download completes.
+
     ```bash
     # Watches for a specific large file finishing writing.
     # Sends a notification to a ntfy.sh topic (replace 'your_ntfy_topic').
@@ -193,7 +220,8 @@ These examples demonstrate common automation tasks in a seedbox or media server 
           curl -d 'Download finished: {{.Name}} in {{.Dir}}' ntfy.sh/your_ntfy_topic"
     ```
 
-7.  **Clean Up .torrent Files:** Automatically remove `.torrent` files from a watch directory shortly after creation (assuming the client picks them up). (Slightly revised existing example)
+8.  **Clean Up .torrent Files:** Automatically remove `.torrent` files from a watch directory shortly after creation (assuming the client picks them up). (Slightly revised existing example)
+
     ```bash
     # Watches for new .torrent files and removes them after a 15-second delay.
     # Adjust delay based on your torrent client's pickup speed.
@@ -207,7 +235,7 @@ These examples demonstrate common automation tasks in a seedbox or media server 
           rm {{.Path}}"
     ```
 
-8.  **Clean Up Auxiliary Files Recursively:** Remove common leftover files like `.nfo` or samples from your final media library.
+9.  **Clean Up Auxiliary Files Recursively:** Remove common leftover files like `.nfo` or samples from your final media library.
     ```bash
     # Watches recursively in media directories for .nfo or sample files and removes them.
     # Use with caution! Double-check patterns.
