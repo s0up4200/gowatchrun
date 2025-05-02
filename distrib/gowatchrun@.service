@@ -1,0 +1,12 @@
+[Unit]
+Description=gowatchrun service for %i
+After=syslog.target network-online.target
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+ExecStart=/usr/local/bin/gowatchrun -w /home/%i/watchfolder -e closewrite -c "/usr/local/bin/mkbrr create {{.Path}} --output /home/%i/torrentfiles/{{.Name}} --quiet"
+
+[Install]
+WantedBy=multi-user.target
