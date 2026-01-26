@@ -5,8 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"text/template"
-	"time"
 
 	"github.com/rs/zerolog/log"
 
@@ -58,29 +58,21 @@ func Execute(cfg watcher.Config, data *watcher.EventData) {
 
 	// TODO: Consider adding process management here later (kill/queue/ignore)
 	cmdExec := exec.Command("sh", "-c", cmdString)
-	cmdExec.Stdout = os.Stdout
-	cmdExec.Stderr = os.Stderr
 	cmdExec.Stdin = os.Stdin
 
-	startTime := time.Now()
-	err = cmdExec.Run()
-	duration := time.Since(startTime)
+	outputBytes, err := cmdExec.CombinedOutput()
+	outputString := strings.TrimSpace(string(outputBytes))
 
 	if err != nil {
-		logEntry := log.Error().
-			Str("command", cmdString).
-			Dur("duration", duration.Round(time.Millisecond)).
-			Err(err)
-		if data != nil {
-			logEntry = logEntry.Str("event_path", data.Path).Str("event_type", data.Event)
+		logEntry := log.Error().Err(err)
+		if outputString != "" {
+			logEntry = logEntry.Str("output", outputString)
 		}
 		logEntry.Msg("Command execution failed")
 	} else {
-		logEntry := log.Trace().
-			Str("command", cmdString).
-			Dur("duration", duration.Round(time.Millisecond))
-		if data != nil {
-			logEntry = logEntry.Str("event_path", data.Path).Str("event_type", data.Event)
+		logEntry := log.Info()
+		if outputString != "" {
+			logEntry = logEntry.Str("output", outputString)
 		}
 		logEntry.Msg("Command executed successfully")
 	}

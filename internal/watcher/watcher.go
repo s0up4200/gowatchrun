@@ -20,7 +20,6 @@ type EventData struct {
 	BaseName string
 }
 
-// ExecutorFunc defines the function signature for executing commands based on events and config.
 type ExecutorFunc func(cfg Config, data *EventData)
 
 type Config struct {
@@ -31,7 +30,7 @@ type Config struct {
 	CommandTmpl   string
 	Recursive     bool
 	DebounceDelay time.Duration
-	ClearTerminal bool // Add field for terminal clearing
+	ClearTerminal bool
 }
 
 func Run(cfg Config, execFunc ExecutorFunc) error {
@@ -49,140 +48,7 @@ func Run(cfg Config, execFunc ExecutorFunc) error {
 	allowedEvents := processEventTypes(cfg.EventTypes)
 
 	done := make(chan bool)
-	go func() {
-		defer close(done)
-		var debounceTimer *time.Timer
-		var lastEventData *EventData
-		var timerChan <-chan time.Time
-
-		for {
-			if debounceTimer != nil {
-				timerChan = debounceTimer.C
-			} else {
-				timerChan = nil
-			}
-
-			select {
-			case event, ok := <-watcher.Events:
-				if !ok {
-					return
-				}
-
-				if cfg.Recursive && event.Has(fsnotify.Create) {
-					info, err := os.Stat(event.Name)
-					if err == nil && info.IsDir() {
-						log.Debug().Msgf("Detected directory creation: %s. Adding watch and scanning...", event.Name)
-						// Add watch to the new directory
-						if watchErr := watcher.Add(event.Name); watchErr != nil {
-							log.Warn().Msgf("Failed to add recursive watch for newly created directory %s: %v", event.Name, watchErr)
-							// Continue processing other events even if adding watch failed for this one
-						}
-
-						// Scan the new directory for matching files
-						entries, readErr := os.ReadDir(event.Name)
-						if readErr != nil {
-							log.Warn().Msgf("Failed to read newly created directory %s for initial scan: %v", event.Name, readErr)
-						} else {
-							for _, entry := range entries {
-								if !entry.IsDir() {
-									fileName := entry.Name()
-									filePath := filepath.Join(event.Name, fileName)
-									// Check against patterns
-									for _, pattern := range cfg.Patterns {
-										match, matchErr := filepath.Match(pattern, fileName)
-										if matchErr != nil {
-											log.Error().Msgf("Error matching pattern '%s' with file '%s': %v", pattern, fileName, matchErr)
-											continue // Try next pattern
-										}
-										if match {
-											log.Info().Msgf("Detected matching file in new directory: %s", filePath)
-											// Construct event data for the file
-											ext := filepath.Ext(fileName)
-											fileEventData := &EventData{
-												Path:     filePath,
-												Name:     fileName,
-												Event:    "CREATE", // Treat as CREATE event
-												Ext:      ext,
-												Dir:      event.Name, // Directory where it was found
-												BaseName: strings.TrimSuffix(fileName, ext),
-											}
-											// Trigger command immediately for this file (or handle debounce)
-											if cfg.DebounceDelay > 0 {
-												// If debouncing, update lastEventData and reset timer
-												lastEventData = fileEventData
-												log.Debug().Msgf("Debouncing event for %s (found in new dir)", fileEventData.Path)
-												if debounceTimer == nil {
-													debounceTimer = time.NewTimer(cfg.DebounceDelay)
-												} else {
-													if !debounceTimer.Stop() {
-														select {
-														case <-debounceTimer.C:
-														default:
-														}
-													}
-													debounceTimer.Reset(cfg.DebounceDelay)
-												}
-											} else {
-												execFunc(cfg, fileEventData)
-											}
-											break
-										}
-									}
-								}
-								// TODO: Optionally, recursively add watch & scan for subdirs created within this new dir?
-								// For now, fsnotify should handle subsequent events within the new dir.
-							}
-						}
-						// Skip further processing of the original directory CREATE event itself
-						// if patterns are active, as the directory name likely won't match file patterns.
-						// If no patterns, let it proceed? For now, always skip to avoid double triggers.
-						continue
-					}
-					// If stat failed or it wasn't a directory, proceed as normal
-				}
-
-				eventData := filterEvent(event, allowedEvents, cfg.Patterns)
-				if eventData == nil {
-					continue // Event didn't match filters
-				}
-
-				// Debounce or execute immediately
-				lastEventData = eventData
-				if cfg.DebounceDelay > 0 {
-					log.Debug().Msgf("Debouncing event for %s", eventData.Path)
-					if debounceTimer == nil {
-						debounceTimer = time.NewTimer(cfg.DebounceDelay)
-					} else {
-						if !debounceTimer.Stop() {
-							select {
-							case <-debounceTimer.C:
-							default:
-							}
-						}
-						debounceTimer.Reset(cfg.DebounceDelay)
-					}
-				} else {
-					// Pass the full config now
-					execFunc(cfg, eventData)
-				}
-
-			case <-timerChan:
-				log.Debug().Msg("Debounce timer fired.")
-				if lastEventData != nil {
-					// Pass the full config now
-					execFunc(cfg, lastEventData)
-					lastEventData = nil
-				}
-				debounceTimer = nil
-
-			case err, ok := <-watcher.Errors:
-				if !ok {
-					return
-				}
-				log.Error().Msgf("Watcher error: %v", err)
-			}
-		}
-	}()
+	go eventLoop(watcher, cfg, execFunc, allowedEvents, done)
 
 	log.Info().Msgf("Starting watcher for directories: %v", cfg.WatchDirs)
 	if cfg.Recursive {
@@ -248,6 +114,138 @@ func Run(cfg Config, execFunc ExecutorFunc) error {
 	<-done
 	log.Info().Msg("Watcher stopped.")
 	return nil
+}
+
+// eventLoop handles the core logic of watching for file system events,
+// debouncing, filtering, and triggering the executor function.
+func eventLoop(watcher *fsnotify.Watcher, cfg Config, execFunc ExecutorFunc, allowedEvents map[fsnotify.Op]bool, done chan<- bool) {
+	defer close(done)
+	var debounceTimer *time.Timer
+	var lastEventData *EventData
+	var timerChan <-chan time.Time
+
+	for {
+		if debounceTimer != nil {
+			timerChan = debounceTimer.C
+		} else {
+			timerChan = nil
+		}
+
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+			handleEvent(event, watcher, cfg, execFunc, allowedEvents, &debounceTimer, &lastEventData)
+
+		case <-timerChan:
+			log.Debug().Msg("Debounce timer fired.")
+			if lastEventData != nil {
+				execFunc(cfg, lastEventData)
+				lastEventData = nil
+			}
+			debounceTimer = nil
+
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return
+			}
+			log.Error().Msgf("Watcher error: %v", err)
+		}
+	}
+}
+
+// handleEvent processes a single file system event.
+// It checks for recursive directory creation, filters the event,
+// and manages debouncing or immediate execution.
+func handleEvent(event fsnotify.Event, watcher *fsnotify.Watcher, cfg Config, execFunc ExecutorFunc, allowedEvents map[fsnotify.Op]bool, debounceTimer **time.Timer, lastEventData **EventData) {
+	if cfg.Recursive && event.Has(fsnotify.Create) {
+		info, err := os.Stat(event.Name)
+		if err == nil && info.IsDir() {
+			log.Debug().Msgf("Detected directory creation: %s. Adding watch and scanning...", event.Name)
+			if watchErr := watcher.Add(event.Name); watchErr != nil {
+				log.Warn().Msgf("Failed to add recursive watch for newly created directory %s: %v", event.Name, watchErr)
+			}
+			scanNewDirectory(cfg, execFunc, event.Name, debounceTimer, lastEventData)
+			return
+		}
+	}
+
+	eventData := filterEvent(event, allowedEvents, cfg.Patterns)
+	if eventData == nil {
+		return
+	}
+
+	*lastEventData = eventData
+	if cfg.DebounceDelay > 0 {
+		log.Debug().Msgf("Debouncing event for %s", eventData.Path)
+		if *debounceTimer == nil {
+			*debounceTimer = time.NewTimer(cfg.DebounceDelay)
+		} else {
+			if !(*debounceTimer).Stop() {
+				select {
+				case <-(*debounceTimer).C:
+				default:
+				}
+			}
+			(*debounceTimer).Reset(cfg.DebounceDelay)
+		}
+	} else {
+		execFunc(cfg, eventData)
+	}
+}
+
+func scanNewDirectory(cfg Config, execFunc ExecutorFunc, dirPath string, debounceTimer **time.Timer, lastEventData **EventData) {
+	entries, readErr := os.ReadDir(dirPath)
+	if readErr != nil {
+		log.Warn().Msgf("Failed to read newly created directory %s for initial scan: %v", dirPath, readErr)
+		return
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			fileName := entry.Name()
+			filePath := filepath.Join(dirPath, fileName)
+			for _, pattern := range cfg.Patterns {
+				match, matchErr := filepath.Match(pattern, fileName)
+				if matchErr != nil {
+					log.Error().Msgf("Error matching pattern '%s' with file '%s': %v", pattern, fileName, matchErr)
+					continue
+				}
+				if match {
+					log.Info().Msgf("Detected matching file in new directory: %s", filePath)
+					ext := filepath.Ext(fileName)
+					fileEventData := &EventData{
+						Path:     filePath,
+						Name:     fileName,
+						Event:    "CREATE",
+						Ext:      ext,
+						Dir:      dirPath,
+						BaseName: strings.TrimSuffix(fileName, ext),
+					}
+
+					if cfg.DebounceDelay > 0 {
+						*lastEventData = fileEventData
+						log.Debug().Msgf("Debouncing event for %s (found in new dir)", fileEventData.Path)
+						if *debounceTimer == nil {
+							*debounceTimer = time.NewTimer(cfg.DebounceDelay)
+						} else {
+							if !(*debounceTimer).Stop() {
+								select {
+								case <-(*debounceTimer).C:
+								default:
+								}
+							}
+							(*debounceTimer).Reset(cfg.DebounceDelay)
+						}
+					} else {
+						execFunc(cfg, fileEventData)
+					}
+					break
+				}
+			}
+		}
+	}
 }
 
 func processEventTypes(types []string) map[fsnotify.Op]bool {
